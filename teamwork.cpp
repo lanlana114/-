@@ -1,79 +1,120 @@
-#include <iostream>   //输入输出
-#include <fstream>    //读取文件
+ #include <stdio.h>   
 #include <string>     //字符串
-#include <vector>     //动态数组，作用：存储
-#include <map>        //储存单词，次数
 #include <cctype>     //处理字符
 #include <windows.h>  //编码问题，加这个防止乱码
-int main() {
-     SetConsoleOutputCP(65001);   //VScode可能存在的编码问题，加此代码避免中文乱码
 
-    std::string filename;
-    std::cout << "请输入文件名: ";
-    std::cin >> filename;
+#define MAX_LINES 1000  //最大行数
+#define MAX_LINE_LEN 1024  //最大行长度
+#define MAX_WORDS 2000  //最大单词数
+#define MAX_WORD_LEN 64  //最大单词长度
 
-    // 1. 读取文件并按行存储
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "打开文件失败！\n";
+typedef struct {
+    char word[MAX_WORD_LEN];  //单词
+    int count;                //出现次数
+} WordItem;
+
+int find_word(WordItem wordCount[], int size, const char* word) {
+    for (int i = 0; i < size; i++) {
+        if (strcmp(wordCount[i].word, word) == 0) {
+            return i;  //找到单词，返回索引
+        }
+    }
+    return -1;  //未找到单词
+}
+
+int main(void) {
+    SetConsoleOutputCP(65001);
+
+    char filename[512];
+    printf("请输入文件名: ");
+    if (scanf("%511s", filename) != 1) {
+        printf("读取文件名失败。\n");
         return 1;
     }
-    std::vector<std::string> lines;
-    std::string line;
-    while (std::getline(file, line)) {
-        lines.push_back(line);
-    }
-    file.close();
 
-    // 2. 单词统计
-    std::map<std::string, int> wordCount;
-    std::ifstream file2(filename);
-    if (!file2.is_open()) {
-        std::cerr << "重新打开文件失败！\n";
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        printf("打开文件失败！\n");
         return 1;
     }
-    std::string word;
-    char ch;
-    while (file2.get(ch)) {
-        if (std::isalpha(ch)) {
-            word.push_back(std::tolower(ch));
+
+    static char lines[MAX_LINES][MAX_LINE_LEN];
+    int lineCount = 0;
+    while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
+        lineCount++;
+    }
+    fclose(file);
+
+    WordItem wordCount[MAX_WORDS];
+    int wordCountSize = 0;
+
+    file = fopen(filename, "r");
+    if (!file) {
+        printf("打开文件失败！\n");
+        return 1;
+    }
+    char word[MAX_WORD_LEN];
+    int wi = 0;
+    int c;
+    while ((c = fgetc(file)) != EOF) {
+        if (isalpha(c)) {
+            if (wi < MAX_WORD_LEN - 1) {
+                word[wi++] = (char)tolower(c);
+            }
         } else {
-            if (!word.empty()) {
-                wordCount[word]++;
-                word.clear();
+            if (wi > 0) {
+                word[wi] = '\0';
+                int idx = find_word(wordCount, wordCountSize, word);
+                if (idx >= 0) {
+                    wordCount[idx].count++;
+                } else if (wordCountSize < MAX_WORDS) {
+                    strcpy(wordCount[wordCountSize].word, word);
+                    wordCount[wordCountSize].count = 1;
+                    wordCountSize++;
+                }
+                wi = 0;
             }
         }
     }
-    if (!word.empty()) {
-        wordCount[word]++;
+    if (wi > 0) {
+        word[wi] = '\0';
+        int idx = find_word(wordCount, wordCountSize, word);
+        if (idx >= 0) {
+            wordCount[idx].count++;
+        } else if (wordCountSize < MAX_WORDS) {
+            strcpy(wordCount[wordCountSize].word, word);
+            wordCount[wordCountSize].count = 1;
+            wordCountSize++;
+        }
     }
-    file2.close();
+    fclose(file);
 
-    // 3. 交互菜单
     int choice;
     do {
-        std::cout << "\n--- 菜单 ---\n";
-        std::cout << "1. 查看原文\n";
-        std::cout << "2. 查看单词统计\n";
-        std::cout << "0. 退出\n";
-        std::cout << "请选择: ";
-        std::cin >> choice;
+        printf("\n--- 菜单 ---\n");
+        printf("1. 查看原文\n");
+        printf("2. 查看单词统计\n");
+        printf("0. 退出\n");
+        printf("请选择: ");
+        if (scanf("%d", &choice) != 1) {
+            break;
+        }
 
         if (choice == 1) {
-            std::cout << "\n--- 原文 ---\n";
-            for (const auto& l : lines) {
-                std::cout << l << '\n';
+            printf("\n--- 原文 ---\n");
+            for (int i = 0; i < lineCount; i++) {
+                printf("%s", lines[i]);
             }
         } else if (choice == 2) {
-            std::cout << "\n--- 单词统计 ---\n";
-            for (const auto& p : wordCount) {
-                std::cout << p.first << " : " << p.second << '\n';
+            printf("\n--- 单词统计 ---\n");
+            for (int i = 0; i < wordCountSize; i++) {
+                printf("%s : %d\n", wordCount[i].word, wordCount[i].count);
             }
         } else if (choice != 0) {
-            std::cout << "无效选择，请重试。\n";
+            printf("无效选择，请重试。\n");
         }
     } while (choice != 0);
 
-    std::cout << "程序结束。\n";
+    printf("程序结束。\n");
     return 0;
 }
