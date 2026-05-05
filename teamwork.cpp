@@ -8,6 +8,18 @@
 #define MAX_WORDS 2000  //最大单词数
 #define MAX_WORD_LEN 64  //最大单词长度
 
+
+is_matching_pair(char left, char right)  {
+    return (left == '(' && right == ')') //
+        || (left == '(' && right == ')') //
+        || (left == '{' && right == '}') //
+
+}
+
+check_brackets(const char* text) {
+
+}
+
 typedef struct {
     char word[MAX_WORD_LEN];  //单词
     int count;                //出现次数
@@ -27,67 +39,76 @@ int main(void) {
 
     char filename[512];
     printf("请输入文件名: ");
-    if (scanf("%511s", filename) != 1) {
-        printf("读取文件名失败。\n");
-        return 1;
+     if (fgets(filename, sizeof(filename), stdin) == NULL) {
+            printf("读取文件名失败。\n");
+            return 1;
+        }
+        size_t len = strlen(filename);
+        if (len > 0 && filename[len - 1] == '\n') {
+            filename[len - 1] = '\0';
+        }
+        if (filename[0] == '\0') {
+            printf("文件名不能为空。\n");
+            continue;
+        }
+
+     file = fopen(filename, "r");
+        if (file) {
+            break;
+        }
+        printf("无法打开文件：%s\n请检查路径后重新输入。\n", filename);
     }
 
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        printf("打开文件失败！\n");
-        return 1;
-    }
 
     static char lines[MAX_LINES][MAX_LINE_LEN];
     int lineCount = 0;
-    while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
+WordItem wordCount[MAX_WORDS];
+    int wordCountSize = 0;
+
+char word[MAX_WORD_LEN];
+    int wi = 0;
+    int c;
+
+while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
+        char *p = lines[lineCount];
+        while (*p) {
+            c = (unsigned char)*p;
+            if (isalpha(c)) {
+                if (wi < MAX_WORD_LEN - 1) {
+                    word[wi++] = (char)tolower(c);
+                }
+            } else {
+                if (wi > 0) {
+                    word[wi] = '\0';
+                    int idx = find_word(wordCount, wordCountSize, word);
+                    if (idx >= 0) {
+                        wordCount[idx].count++;
+                    } else if (wordCountSize < MAX_WORDS) {
+                        strcpy(wordCount[wordCountSize].word, word);
+                        wordCount[wordCountSize].count = 1;
+                        wordCountSize++;
+                    }
+                    wi = 0;
+                }
+            }
+            p++;
+        }
+        if (wi > 0) {
+            word[wi] = '\0';
+            int idx = find_word(wordCount, wordCountSize, word);
+            if (idx >= 0) {
+                wordCount[idx].count++;
+            } else if (wordCountSize < MAX_WORDS) {
+                strcpy(wordCount[wordCountSize].word, word);
+                wordCount[wordCountSize].count = 1;
+                wordCountSize++;
+            }
+            wi = 0;
+        }
         lineCount++;
     }
     fclose(file);
 
-    WordItem wordCount[MAX_WORDS];
-    int wordCountSize = 0;
-
-    file = fopen(filename, "r");
-    if (!file) {
-        printf("打开文件失败！\n");
-        return 1;
-    }
-    char word[MAX_WORD_LEN];
-    int wi = 0;
-    int c;
-    while ((c = fgetc(file)) != EOF) {
-        if (isalpha(c)) {
-            if (wi < MAX_WORD_LEN - 1) {
-                word[wi++] = (char)tolower(c);
-            }
-        } else {
-            if (wi > 0) {
-                word[wi] = '\0';
-                int idx = find_word(wordCount, wordCountSize, word);
-                if (idx >= 0) {
-                    wordCount[idx].count++;
-                } else if (wordCountSize < MAX_WORDS) {
-                    strcpy(wordCount[wordCountSize].word, word);
-                    wordCount[wordCountSize].count = 1;
-                    wordCountSize++;
-                }
-                wi = 0;
-            }
-        }
-    }
-    if (wi > 0) {
-        word[wi] = '\0';
-        int idx = find_word(wordCount, wordCountSize, word);
-        if (idx >= 0) {
-            wordCount[idx].count++;
-        } else if (wordCountSize < MAX_WORDS) {
-            strcpy(wordCount[wordCountSize].word, word);
-            wordCount[wordCountSize].count = 1;
-            wordCountSize++;
-        }
-    }
-    fclose(file);
 
     int choice;
     do {
