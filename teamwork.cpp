@@ -1,6 +1,6 @@
- #include <stdio.h>   
-#include <string>     //字符串
-#include <cctype>     //处理字符
+#include <stdio.h>
+#include <string.h>   //字符串处理
+#include <ctype.h>    //处理字符
 #include <windows.h>  //编码问题，加这个防止乱码
 
 #define MAX_LINES 1000  //最大行数
@@ -9,15 +9,14 @@
 #define MAX_WORD_LEN 64  //最大单词长度
 #define MAX_TASKS 50    //最大批处理任务数
 
-int is_matching_pair(char left, char right)  {
-    return (left == '(' && right == ')') 
-        || (left == '(' && right == ')') 
-        || (left == '{' && right == '}') ;
-
+int is_matching_pair(char left, char right) {
+    return (left == '(' && right == ')')
+        || (left == '[' && right == ']')
+        || (left == '{' && right == '}');
 }
 
 int check_brackets(const char* text) {
-(void)text;
+    (void)text;
     return 1;
 }
 
@@ -162,8 +161,10 @@ int main(void) {
     SetConsoleOutputCP(65001);
 
     char filename[512];
-    printf("请输入文件名: ");
-     if (fgets(filename, sizeof(filename), stdin) == NULL) {
+    FILE *file = NULL;
+    while (1) {
+        printf("请输入文件名: ");
+        if (fgets(filename, sizeof(filename), stdin) == NULL) {
             printf("读取文件名失败。\n");
             return 1;
         }
@@ -176,24 +177,23 @@ int main(void) {
             continue;
         }
 
-     file = fopen(filename, "r");
+        file = fopen(filename, "r");
         if (file) {
             break;
         }
         printf("无法打开文件：%s\n请检查路径后重新输入。\n", filename);
     }
 
-
     static char lines[MAX_LINES][MAX_LINE_LEN];
     int lineCount = 0;
-WordItem wordCount[MAX_WORDS];
+    WordItem wordCount[MAX_WORDS];
     int wordCountSize = 0;
 
-char word[MAX_WORD_LEN];
+    char word[MAX_WORD_LEN];
     int wi = 0;
     int c;
 
-while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
+    while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
         char *p = lines[lineCount];
         while (*p) {
             c = (unsigned char)*p;
@@ -246,7 +246,7 @@ while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != N
         printf("0. 退出\n");
         printf("请选择: ");
         if (scanf("%d", &choice) != 1) {
-           int ch;
+            int ch;
             while ((ch = getchar()) != '\n' && ch != EOF) {
             }
             printf("输入无效，请输入数字。\n");
@@ -255,7 +255,11 @@ while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != N
         }
 
         if (choice == 1) {
-          char taskFilename[512];
+            if (taskCount >= MAX_TASKS) {
+                printf("任务队列已满，无法添加更多任务。\n");
+                continue;
+            }
+            char taskFilename[512];
             int action = 0;
             printf("请输入文本文件名: ");
             if (scanf("%511s", taskFilename) != 1) {
