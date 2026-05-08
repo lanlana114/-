@@ -8,28 +8,28 @@
 #define MAX_WORDS 2000  //最大单词数
 #define MAX_WORD_LEN 64  //最大单词长度
 #define MAX_TASKS 50    //最大批处理任务数
-
+// 检查左右括号是否匹配的函数
 int is_matching_pair(char left, char right) {
     return (left == '(' && right == ')')
         || (left == '[' && right == ']')
         || (left == '{' && right == '}');
 }
-
+// 检查文本中括号是否平衡的函数（目前未实现，返回1）
 int check_brackets(const char* text) {
     (void)text;
     return 1;
 }
-
+// 定义单词项结构体，包含单词和出现次数
 typedef struct {
     char word[MAX_WORD_LEN];  //单词
     int count;                //出现次数
 } WordItem;
-
+// 定义任务结构体，包含文件名和操作类型
 typedef struct {
     char filename[512];
     int action; // 1=查看原文, 2=单词统计
 } Task;
-
+// 在单词数组中查找单词的函数
 int find_word(WordItem wordCount[], int size, const char* word) {
     for (int i = 0; i < size; i++) {
         if (strcmp(wordCount[i].word, word) == 0) {
@@ -38,7 +38,7 @@ int find_word(WordItem wordCount[], int size, const char* word) {
     }
     return -1;  //未找到单词
 }
-
+// 从文件中读取行的函数
 int read_lines(const char* filename, char lines[][MAX_LINE_LEN], int* outLineCount) {
     FILE* file = fopen(filename, "r");
     if (!file) {
@@ -52,7 +52,7 @@ int read_lines(const char* filename, char lines[][MAX_LINE_LEN], int* outLineCou
     *outLineCount = lineCount;
     return 1;
 }
-
+// 统计文件中单词出现次数的函数
 int count_words(const char* filename, WordItem wordCount[], int* outCount) {
     FILE* file = fopen(filename, "r");
     if (!file) {
@@ -63,7 +63,7 @@ int count_words(const char* filename, WordItem wordCount[], int* outCount) {
     char word[MAX_WORD_LEN];
     int wi = 0;
     int c;
-
+// 逐字符读取文件，提取单词并统计
     while ((c = fgetc(file)) != EOF) {
         if (isalpha(c)) {
             if (wi < MAX_WORD_LEN - 1) {
@@ -84,7 +84,7 @@ int count_words(const char* filename, WordItem wordCount[], int* outCount) {
             }
         }
     }
-
+ // 处理最后一个单词
     if (wi > 0) {
         word[wi] = '\0';
         int idx = find_word(wordCount, wordCountSize, word);
@@ -101,7 +101,7 @@ int count_words(const char* filename, WordItem wordCount[], int* outCount) {
     *outCount = wordCountSize;
     return 1;
 }
-
+// 显示文件原文的函数
 void show_text(const char* filename) {
     static char lines[MAX_LINES][MAX_LINE_LEN];
     int lineCount = 0;
@@ -115,7 +115,7 @@ void show_text(const char* filename) {
     }
     printf("\n");
 }
-
+// 显示单词统计结果的函数
 void show_word_count(const char* filename) {
     WordItem wordCount[MAX_WORDS];
     int wordCountSize = 0;
@@ -132,12 +132,12 @@ void show_word_count(const char* filename) {
     }
     printf("\n");
 }
-
+// 打印任务信息的函数
 void print_task(const Task* task, int index) {
     printf("%d. 文件名: %s, 类型: %s\n", index + 1, task->filename,
            task->action == 1 ? "查看原文" : "单词统计");
 }
-
+// 执行批处理任务的函数
 void execute_batch(Task tasks[], int taskCount) {
     if (taskCount == 0) {
         printf("当前没有批处理任务。\n");
@@ -158,10 +158,10 @@ void execute_batch(Task tasks[], int taskCount) {
 }
 
 int main(void) {
-    SetConsoleOutputCP(65001);
+    SetConsoleOutputCP(65001); // 设置控制台输出编码为UTF-8，防止中文乱码
 
     char filename[512];
-    FILE *file = NULL;
+    FILE *file = NULL;// 循环提示用户输入文件名，直到成功打开文件
     while (1) {
         printf("请输入文件名: ");
         if (fgets(filename, sizeof(filename), stdin) == NULL) {
@@ -183,7 +183,7 @@ int main(void) {
         }
         printf("无法打开文件：%s\n请检查路径后重新输入。\n", filename);
     }
-
+// 初始化变量用于存储文件内容和单词统计
     static char lines[MAX_LINES][MAX_LINE_LEN];
     int lineCount = 0;
     WordItem wordCount[MAX_WORDS];
@@ -192,9 +192,10 @@ int main(void) {
     char word[MAX_WORD_LEN];
     int wi = 0;
     int c;
-
+ // 读取文件内容并同时进行单词统计
     while (lineCount < MAX_LINES && fgets(lines[lineCount], MAX_LINE_LEN, file) != NULL) {
         char *p = lines[lineCount];
+         // 逐字符处理当前行，提取单词
         while (*p) {
             c = (unsigned char)*p;
             if (isalpha(c)) {
@@ -217,6 +218,7 @@ int main(void) {
             }
             p++;
         }
+         // 处理行末的单词
         if (wi > 0) {
             word[wi] = '\0';
             int idx = find_word(wordCount, wordCountSize, word);
@@ -232,10 +234,11 @@ int main(void) {
         lineCount++;
     }
     fclose(file);
-
+  // 初始化批处理任务数组
     Task tasks[MAX_TASKS];
     int taskCount = 0;
     int choice;
+     // 主菜单循环
     do {
         printf("\n--- 菜单 ---\n");
         printf("1. 添加批处理任务\n");
@@ -255,6 +258,7 @@ int main(void) {
         }
 
         if (choice == 1) {
+            // 添加批处理任务
             if (taskCount >= MAX_TASKS) {
                 printf("任务队列已满，无法添加更多任务。\n");
                 continue;
@@ -280,6 +284,7 @@ int main(void) {
             printf("已添加批处理任务: %s (%s)\n", taskFilename,
                    action == 1 ? "查看原文" : "单词统计");
         } else if (choice == 2) {
+            // 查看批处理队列
             if (taskCount == 0) {
                 printf("当前没有批处理任务。\n");
             } else {
@@ -289,14 +294,17 @@ int main(void) {
                 }
             }
         } else if (choice == 3) {
+             // 执行批处理任务
             execute_batch(tasks, taskCount);
             taskCount = 0;
         } else if (choice == 4) {
+            // 查看当前文件的原文
             printf("\n--- 原文 ---\n");
             for (int i = 0; i < lineCount; i++) {
                 printf("%s", lines[i]);
             }
         } else if (choice == 5) {
+            // 查看当前文件的单词统计
             printf("\n--- 单词统计 ---\n");
             for (int i = 0; i < wordCountSize; i++) {
                 printf("%s : %d\n", wordCount[i].word, wordCount[i].count);
