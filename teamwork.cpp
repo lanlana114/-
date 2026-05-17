@@ -2,6 +2,8 @@
 #include <string.h>   //字符串处理
 #include <ctype.h>    //处理字符
 #include <windows.h>  //编码问题，加这个防止乱码
+#include <stdlib.h>
+#include <time.h>
 
 #define MAX_LINES 1000  //最大行数
 #define MAX_LINE_LEN 1024  //最大行长度
@@ -132,6 +134,52 @@ void show_word_count(const char* filename) {
     }
     printf("\n");
 }
+// 计算 KMP 模式函数的最长前缀后缀数组
+void compute_lps(const char* pattern, int m, int lps[]) {
+    int len = 0;
+    lps[0] = 0;
+    int i = 1;
+    while (i < m) {
+        if (pattern[i] == pattern[len]) {
+            len++;
+            lps[i] = len;
+            i++;
+        } else {
+            if (len != 0) {
+                len = lps[len - 1];
+            } else {
+                lps[i] = 0;
+                i++;
+            }
+        }
+    }
+}
+
+// 朴素字符串匹配，仅使用数组和字符比较
+int naive_search_line(const char* line, const char* pattern, int positions[], int maxPositions) {
+    int n = strlen(line);
+    int m = strlen(pattern);
+    int found = 0;
+    if (m == 0 || n < m) {
+        return 0;
+    }
+    for (int i = 0; i <= n - m; i++) {
+        int j;
+        for (j = 0; j < m; j++) {
+            if (line[i + j] != pattern[j]) {
+                break;
+            }
+        }
+        if (j == m) {
+            if (found < maxPositions) {
+                positions[found] = i;
+            }
+            found++;
+        }
+    }
+    return found;
+}
+
 // 打印任务信息的函数
 void print_task(const Task* task, int index) {
     printf("%d. 文件名: %s, 类型: %s\n", index + 1, task->filename,
