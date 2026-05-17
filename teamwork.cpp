@@ -179,6 +179,69 @@ int naive_search_line(const char* line, const char* pattern, int positions[], in
     }
     return found;
 }
+// KMP 字符串匹配
+int kmp_search_line(const char* line, const char* pattern, int positions[], int maxPositions) {
+    int n = strlen(line);
+    int m = strlen(pattern);
+    int found = 0;
+    if (m == 0 || n < m) {
+        return 0;
+    }
+    int* lps = (int*)malloc(sizeof(int) * m);
+    if (!lps) {
+        return 0;
+    }
+    compute_lps(pattern, m, lps);
+    int i = 0;
+    int j = 0;
+    while (i < n) {
+        if (line[i] == pattern[j]) {
+            i++;
+            j++;
+            if (j == m) {
+                if (found < maxPositions) {
+                    positions[found] = i - j;
+                }
+                found++;
+                j = lps[j - 1];
+            }
+        } else {
+            if (j != 0) {
+                j = lps[j - 1];
+            } else {
+                i++;
+            }
+        }
+    }
+    free(lps);
+    return found;
+}
+
+// 执行关键词查找，返回匹配总数，可选择是否打印位置
+int search_keyword(const char lines[][MAX_LINE_LEN], int lineCount, const char* keyword, int useKMP, int verbose) {
+    const int maxPositionsPerLine = 1024;
+    int positions[maxPositionsPerLine];
+    int totalCount = 0;
+    for (int i = 0; i < lineCount; i++) {
+        int count = useKMP ? kmp_search_line(lines[i], keyword, positions, maxPositionsPerLine)
+                           : naive_search_line(lines[i], keyword, positions, maxPositionsPerLine);
+        if (verbose) {
+            for (int k = 0; k < count && k < maxPositionsPerLine; k++) {
+                printf("第 %d 行，第 %d 列\n", i + 1, positions[k] + 1);
+            }
+        }
+        totalCount += count;
+    }
+    if (verbose) {
+        if (totalCount == 0) {
+            printf("未找到关键词 '%s'。\n", keyword);
+        } else {
+            printf("共找到 %d 处匹配。\n", totalCount);
+        }
+    }
+    return totalCount;
+}
+
 
 // 打印任务信息的函数
 void print_task(const Task* task, int index) {
