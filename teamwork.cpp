@@ -4,12 +4,15 @@
 #include <windows.h>  //编码问题，加这个防止乱码
 #include <stdlib.h>
 #include <time.h>
+#include <stdint.h>
 
 #define MAX_LINES 1000  //最大行数
 #define MAX_LINE_LEN 1024  //最大行长度
 #define MAX_WORDS 2000  //最大单词数
 #define MAX_WORD_LEN 64  //最大单词长度
 #define MAX_TASKS 50    //最大批处理任务数
+#define MAX_CODE_LEN 512 // 哈夫曼编码最大长度
+
 // 检查左右括号是否匹配的函数
 int is_matching_pair(char left, char right) {
     return (left == '(' && right == ')')
@@ -133,6 +136,109 @@ void show_word_count(const char* filename) {
         printf("(未找到单词)\n");
     }
     printf("\n");
+}
+// 二叉搜索树节点，用于按字典序排序单词
+typedef struct WordNode {
+    char word[MAX_WORD_LEN];
+    int count;
+    struct WordNode* left;
+    struct WordNode* right;
+} WordNode;
+
+// 创建单词节点
+WordNode* create_word_node(const char* word) {
+    WordNode* node = (WordNode*)malloc(sizeof(WordNode));
+    if (!node) {
+        return NULL;
+    }
+    strcpy(node->word, word);
+    node->count = 1;
+    node->left = node->right = NULL;
+    return node;
+}
+
+// 插入单词到二叉搜索树，如果已存在则增加计数
+WordNode* insert_word_node(WordNode* root, const char* word) {
+    if (!root) {
+        return create_word_node(word);
+    }
+    int cmp = strcmp(word, root->word);
+    if (cmp == 0) {
+        root->count++;
+    } else if (cmp < 0) {
+        root->left = insert_word_node(root->left, word);
+    } else {
+        root->right = insert_word_node(root->right, word);
+    }
+    return root;
+}
+
+// 中序遍历并输出单词
+void inorder_print_word_tree(const WordNode* root) {
+    if (!root) {
+        return;
+    }
+    inorder_print_word_tree(root->left);
+    printf("%s : %d\n", root->word, root->count);
+    inorder_print_word_tree(root->right);
+}
+
+// 释放单词树内存
+void free_word_tree(WordNode* root) {
+    if (!root) {
+        return;
+    }
+    free_word_tree(root->left);
+    free_word_tree(root->right);
+    free(root);
+}
+
+// 从文件读取单词并构建二叉搜索树
+int build_word_bst(const char* filename, WordNode** rootOut) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        return 0;
+    }
+    *rootOut = NULL;
+    char word[MAX_WORD_LEN];
+    int wi = 0;
+    int c;
+    while ((c = fgetc(file)) != EOF) {
+        if (isalpha(c)) {
+            if (wi < MAX_WORD_LEN - 1) {
+                word[wi++] = (char)tolower(c);
+            }
+        } else {
+            if (wi > 0) {
+                word[wi] = '\0';
+                *rootOut = insert_word_node(*rootOut, word);
+                wi = 0;
+            }
+        }
+    }
+    if (wi > 0) {
+        word[wi] = '\0';
+        *rootOut = insert_word_node(*rootOut, word);
+    }
+    fclose(file);
+    return 1;
+}
+
+// 按字典序输出文本文件中所有单词及其统计
+void show_sorted_words(const char* filename) {
+    WordNode* root = NULL;
+    if (!build_word_bst(filename, &root)) {
+        printf("无法打开文件: %s\n", filename);
+        return;
+    }
+    printf("\n--- 按字典序排序的单词: %s ---\n", filename);
+    if (!root) {
+        printf("(未找到单词)\n\n");
+        return;
+    }
+    inorder_print_word_tree(root);
+    printf("\n");
+    free_word_tree(root);
 }
 // 计算 KMP 模式函数的最长前缀后缀数组
 void compute_lps(const char* pattern, int m, int lps[]) {
