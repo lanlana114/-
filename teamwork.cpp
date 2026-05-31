@@ -758,6 +758,9 @@ int main(void) {
         printf("3. 执行批处理任务\n");
         printf("4. 查看原文\n");
         printf("5. 查看单词统计\n");
+        printf("6. 关键词查找 (朴素/KMP)\n");
+        printf("7. 单词字典序排序输出\n");
+        printf("8. 文本压缩/解压\n");
         printf("0. 退出\n");
         printf("请选择: ");
         if (scanf("%d", &choice) != 1) {
@@ -769,6 +772,7 @@ int main(void) {
             continue;
         }
 
+        // 处理用户选择
         if (choice == 1) {
             // 添加批处理任务
             if (taskCount >= MAX_TASKS) {
@@ -806,7 +810,7 @@ int main(void) {
                 }
             }
         } else if (choice == 3) {
-             // 执行批处理任务
+            // 执行批处理任务
             execute_batch(tasks, taskCount);
             taskCount = 0;
         } else if (choice == 4) {
@@ -820,6 +824,153 @@ int main(void) {
             printf("\n--- 单词统计 ---\n");
             for (int i = 0; i < wordCountSize; i++) {
                 printf("%s : %d\n", wordCount[i].word, wordCount[i].count);
+            }
+        } else if (choice == 6) {
+            // 关键词查找
+            int mode = 0;
+            char keyword[MAX_LINE_LEN];
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            printf("请输入关键词: ");
+            if (fgets(keyword, sizeof(keyword), stdin) == NULL) {
+                printf("读取关键词失败。\n");
+                continue;
+            }
+            size_t keylen = strlen(keyword);
+            if (keylen > 0 && keyword[keylen - 1] == '\n') {
+                keyword[keylen - 1] = '\0';
+            }
+            if (keyword[0] == '\0') {
+                printf("关键词不能为空。\n");
+                continue;
+            }
+            printf("请选择查找模式: 1=朴素匹配, 2=KMP匹配, 3=对比两者效率: ");
+            if (scanf("%d", &mode) != 1 || mode < 1 || mode > 3) {
+                while ((ch = getchar()) != '\n' && ch != EOF) {
+                }
+                printf("无效选择，返回菜单。\n");
+                continue;
+            }
+            if (mode == 1 || mode == 2) {
+                clock_t start = clock();
+                search_keyword(lines, lineCount, keyword, mode == 2, 1);
+                clock_t end = clock();
+                printf("模式 %s 用时: %.3f 毫秒\n", mode == 1 ? "朴素匹配" : "KMP匹配",
+                       (double)(end - start) * 1000.0 / CLOCKS_PER_SEC);
+            } else {
+                clock_t start1 = clock();
+                int count1 = search_keyword(lines, lineCount, keyword, 0, 0);
+                clock_t end1 = clock();
+                double time1 = (double)(end1 - start1) * 1000.0 / CLOCKS_PER_SEC;
+                clock_t start2 = clock();
+                int count2 = search_keyword(lines, lineCount, keyword, 1, 0);
+                clock_t end2 = clock();
+                double time2 = (double)(end2 - start2) * 1000.0 / CLOCKS_PER_SEC;
+                printf("\n对比结果:\n");
+                printf("朴素匹配 结果数量: %d, 用时: %.3f 毫秒\n", count1, time1);
+                printf("KMP匹配 结果数量: %d, 用时: %.3f 毫秒\n", count2, time2);
+                if (count1 != count2) {
+                    printf("警告：两种匹配结果数量不同，请检查关键词或文本。\n");
+                } else {
+                    printf("结果数量一致。\n");
+                }
+                if (time1 < time2) {
+                    printf("朴素匹配更快。\n");
+                } else if (time1 > time2) {
+                    printf("KMP匹配更快。\n");
+                } else {
+                    printf("两种匹配耗时相同。\n");
+                }
+                if (count1 > 0) {
+                    printf("\n使用朴素匹配打印位置：\n");
+                    search_keyword(lines, lineCount, keyword, 0, 1);
+                }
+            }
+        } else if (choice == 7) {
+            char sortFilename[512];
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            printf("请输入文本文件名: ");
+            if (fgets(sortFilename, sizeof(sortFilename), stdin) == NULL) {
+                printf("读取文件名失败。\n");
+                continue;
+            }
+            size_t len = strlen(sortFilename);
+            if (len > 0 && sortFilename[len - 1] == '\n') {
+                sortFilename[len - 1] = '\0';
+            }
+            if (sortFilename[0] == '\0') {
+                printf("文件名不能为空。\n");
+                continue;
+            }
+            show_sorted_words(sortFilename);
+        } else if (choice == 8) {
+            int action = 0;
+            char inputName[512];
+            char outputName[512];
+            size_t len;
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            printf("请选择操作: 1=压缩文件, 2=解压文件: ");
+            if (scanf("%d", &action) != 1 || (action != 1 && action != 2)) {
+                while ((ch = getchar()) != '\n' && ch != EOF) {
+                }
+                printf("无效选择，返回菜单。\n");
+                continue;
+            }
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            if (action == 1) {
+                printf("请输入要压缩的文本文件名: ");
+                if (fgets(inputName, sizeof(inputName), stdin) == NULL) {
+                    printf("读取文件名失败。\n");
+                    continue;
+                }
+                len = strlen(inputName);
+                if (len > 0 && inputName[len - 1] == '\n') {
+                    inputName[len - 1] = '\0';
+                }
+                printf("请输入输出压缩文件名: ");
+                if (fgets(outputName, sizeof(outputName), stdin) == NULL) {
+                    printf("读取文件名失败。\n");
+                    continue;
+                }
+                len = strlen(outputName);
+                if (len > 0 && outputName[len - 1] == '\n') {
+                    outputName[len - 1] = '\0';
+                }
+                if (compress_file(inputName, outputName)) {
+                    printf("压缩成功: %s -> %s\n", inputName, outputName);
+                } else {
+                    printf("压缩失败，请检查文件名或文件内容。\n");
+                }
+            } else {
+                printf("请输入要解压的压缩文件名: ");
+                if (fgets(inputName, sizeof(inputName), stdin) == NULL) {
+                    printf("读取文件名失败。\n");
+                    continue;
+                }
+                len = strlen(inputName);
+                if (len > 0 && inputName[len - 1] == '\n') {
+                    inputName[len - 1] = '\0';
+                }
+                printf("请输入输出文本文件名: ");
+                if (fgets(outputName, sizeof(outputName), stdin) == NULL) {
+                    printf("读取文件名失败。\n");
+                    continue;
+                }
+                len = strlen(outputName);
+                if (len > 0 && outputName[len - 1] == '\n') {
+                    outputName[len - 1] = '\0';
+                }
+                if (decompress_file(inputName, outputName)) {
+                    printf("解压成功: %s -> %s\n", inputName, outputName);
+                } else {
+                    printf("解压失败，请检查压缩文件是否有效。\n");
+                }
             }
         } else if (choice != 0) {
             printf("无效选择，请重试。\n");
