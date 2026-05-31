@@ -240,6 +240,301 @@ void show_sorted_words(const char* filename) {
     printf("\n");
     free_word_tree(root);
 }
+
+// Huffman 二叉树节点，用于文本压缩/解压
+typedef struct HuffmanNode {
+    unsigned char ch;
+    int freq;
+    struct HuffmanNode* left;
+    struct HuffmanNode* right;
+} HuffmanNode;
+
+// 创建 Huffman 节点
+HuffmanNode* create_huffman_node(unsigned char ch, int freq) {
+    HuffmanNode* node = (HuffmanNode*)malloc(sizeof(HuffmanNode));
+    if (!node) {
+        return NULL;
+    }
+    node->ch = ch;
+    node->freq = freq;
+    node->left = node->right = NULL;
+    return node;
+}
+
+// 释放 Huffman 树内存
+void free_huffman_tree(HuffmanNode* root) {
+    if (!root) {
+        return;
+    }
+    free_huffman_tree(root->left);
+    free_huffman_tree(root->right);
+    free(root);
+}
+
+// 构建 Huffman 树
+HuffmanNode* build_huffman_tree(const int freq[256]) {
+    HuffmanNode* nodes[256];
+    int nodeCount = 0;
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            nodes[nodeCount++] = create_huffman_node((unsigned char)i, freq[i]);
+        }
+    }
+    if (nodeCount == 0) {
+        return NULL;
+    }
+    while (nodeCount > 1) {
+        int min1 = -1, min2 = -1;
+        for (int i = 0; i < nodeCount; i++) {
+            if (min1 == -1 || nodes[i]->freq < nodes[min1]->freq) {
+                min2 = min1;
+                min1 = i;
+            } else if (min2 == -1 || nodes[i]->freq < nodes[min2]->freq) {
+                min2 = i;
+            }
+        }
+        HuffmanNode* left = nodes[min1];
+        HuffmanNode* right = nodes[min2];
+        HuffmanNode* parent = create_huffman_node(0, left->freq + right->freq);
+        if (!parent) {
+            return NULL;
+        }
+        parent->left = left;
+        parent->right = right;
+        if (min1 > min2) {
+            int tmp = min1;
+            min1 = min2;
+            min2 = tmp;
+        }
+        nodes[min1] = parent;
+        nodes[min2] = nodes[nodeCount - 1];
+        nodeCount--;
+    }
+    return nodes[0];
+}
+
+// 生成每个字符的 Huffman 码
+void build_huffman_codes(HuffmanNode* root, char codes[256][MAX_CODE_LEN], char code[], int depth) {
+    if (!root) {
+        return;
+    }
+    if (!root->left && !root->right) {
+        if (depth == 0) {
+            code[depth++] = '0';
+        }
+        code[depth] = '\0';
+        strcpy(codes[root->ch], code);
+        return;
+    }
+    if (root->left) {
+        code[depth] = '0';
+        build_huffman_codes(root->left, codes, code, depth + 1);
+    }
+    if (root->right) {
+        code[depth] = '1';
+        build_huffman_codes(root->right, codes, code, depth + 1);
+    }
+}
+
+// 统计非零符号数量
+int count_unique_symbols(const int freq[256]) {
+    int count = 0;
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+// 写单个位到输出文件
+int write_bit(FILE* out, unsigned char bit, unsigned char* bitBuffer, int* bitCount) {
+    *bitBuffer = (unsigned char)((*bitBuffer << 1) | (bit & 1));
+    (*bitCount)++;
+    if (*bitCount == 8) {
+        if (fwrite(bitBuffer, 1, 1, out) != 1) {
+            return 0;
+        }
+        *bitBuffer = 0;
+        *bitCount = 0;
+    }
+    return 1;
+}
+
+// 刷新剩余位
+int flush_bit_buffer(FILE* out, unsigned char* bitBuffer, int* bitCount) {
+    if (*bitCount == 0) {
+        return 1;
+    }
+    *bitBuffer <<= (8 - *bitCount);
+    if (fwrite(bitBuffer, 1, 1, out) != 1) {
+        return 0;
+    }
+    *bitBuffer = 0;
+    *bitCount = 0;
+    return 1;
+}
+
+// 压缩文件
+int compress_file(const char* input, const char* output) {
+    FILE* in = fopen(input, "rb");
+    if (!in) {
+        return 0;
+    }
+
+    int freq[256] = {0};
+    uint64_t total = 0;
+    int ch;
+    while ((ch = fgetc(in)) != EOF) {
+        freq[(unsigned char)ch]++;
+        total++;
+    }
+    if (total == 0) {
+        fclose(in);
+        return 0;
+    }
+    HuffmanNode* root = build_huffman_tree(freq);
+    if (!root) {
+        fclose(in);
+        return 0;
+    }
+
+    char codes[256][MAX_CODE_LEN] = {{0}};
+    char code[MAX_CODE_LEN];
+    build_huffman_codes(root, codes, code, 0);
+
+    FILE* out = fopen(output, "wb");
+    if (!out) {
+        free_huffman_tree(root);
+        fclose(in);
+        return 0;
+    }
+
+    fwrite("HTF1", 1, 4, out);
+    uint64_t size = total;
+    uint32_t uniqueCount = (uint32_t)count_unique_symbols(freq);
+    fwrite(&size, sizeof(size), 1, out);
+    fwrite(&uniqueCount, sizeof(uniqueCount), 1, out);
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            unsigned char symbol = (unsigned char)i;
+            fwrite(&symbol, 1, 1, out);
+            uint64_t f = (uint64_t)freq[i];
+            fwrite(&f, sizeof(f), 1, out);
+        }
+    }
+
+    rewind(in);
+    unsigned char bitBuffer = 0;
+    int bitCount = 0;
+    while ((ch = fgetc(in)) != EOF) {
+        const char* codeStr = codes[(unsigned char)ch];
+        for (int i = 0; codeStr[i] != '\0'; i++) {
+            unsigned char bit = (unsigned char)(codeStr[i] == '1');
+            if (!write_bit(out, bit, &bitBuffer, &bitCount)) {
+                fclose(in);
+                fclose(out);
+                free_huffman_tree(root);
+                return 0;
+            }
+        }
+    }
+    flush_bit_buffer(out, &bitBuffer, &bitCount);
+    fclose(in);
+    fclose(out);
+    free_huffman_tree(root);
+    return 1;
+}
+
+// 读取文件中的单个位
+int read_bit(unsigned char byte, int position) {
+    return (byte >> (7 - position)) & 1;
+}
+
+// 解压文件
+int decompress_file(const char* input, const char* output) {
+    FILE* in = fopen(input, "rb");
+    if (!in) {
+        return 0;
+    }
+    char magic[4];
+    if (fread(magic, 1, 4, in) != 4 || strncmp(magic, "HTF1", 4) != 0) {
+        fclose(in);
+        return 0;
+    }
+    uint64_t originalSize = 0;
+    if (fread(&originalSize, sizeof(originalSize), 1, in) != 1) {
+        fclose(in);
+        return 0;
+    }
+    uint32_t uniqueCount = 0;
+    if (fread(&uniqueCount, sizeof(uniqueCount), 1, in) != 1) {
+        fclose(in);
+        return 0;
+    }
+    int freq[256] = {0};
+    for (uint32_t i = 0; i < uniqueCount; i++) {
+        unsigned char symbol;
+        uint64_t f;
+        if (fread(&symbol, 1, 1, in) != 1 || fread(&f, sizeof(f), 1, in) != 1) {
+            fclose(in);
+            return 0;
+        }
+        freq[symbol] = (int)f;
+    }
+    HuffmanNode* root = build_huffman_tree(freq);
+    if (!root) {
+        fclose(in);
+        return 0;
+    }
+    FILE* out = fopen(output, "wb");
+    if (!out) {
+        free_huffman_tree(root);
+        fclose(in);
+        return 0;
+    }
+
+    if (!root->left && !root->right) {
+        unsigned char symbol = root->ch;
+        for (uint64_t i = 0; i < originalSize; i++) {
+            fwrite(&symbol, 1, 1, out);
+        }
+        fclose(in);
+        fclose(out);
+        free_huffman_tree(root);
+        return 1;
+    }
+
+    HuffmanNode* node = root;
+    int bytesRead;
+    unsigned char byte;
+    uint64_t written = 0;
+    while (written < originalSize && fread(&byte, 1, 1, in) == 1) {
+        for (int bitPos = 0; bitPos < 8 && written < originalSize; bitPos++) {
+            int bit = read_bit(byte, bitPos);
+            node = bit == 0 ? node->left : node->right;
+            if (!node) {
+                fclose(in);
+                fclose(out);
+                free_huffman_tree(root);
+                return 0;
+            }
+            if (!node->left && !node->right) {
+                fwrite(&node->ch, 1, 1, out);
+                written++;
+                node = root;
+                if (written >= originalSize) {
+                    break;
+                }
+            }
+        }
+    }
+    fclose(in);
+    fclose(out);
+    free_huffman_tree(root);
+    return written == originalSize;
+}
+
 // 计算 KMP 模式函数的最长前缀后缀数组
 void compute_lps(const char* pattern, int m, int lps[]) {
     int len = 0;
