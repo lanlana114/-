@@ -241,6 +241,214 @@ void show_sorted_words(const char* filename) {
     free_word_tree(root);
 }
 
+int extract_unique_words_from_sentence(const char* sentence, char uniqueWords[][MAX_WORD_LEN], int* outCount, WordItem* wordCount, int* wordCountSize, int* assoc) {
+    char word[MAX_WORD_LEN];
+    int wi = 0;
+    int uniqueCount = 0;
+    int sentenceWordIndexes[MAX_WORDS];
+
+    for (const char* p = sentence; *p != '\0'; p++) {
+        int c = (unsigned char)*p;
+        if (isalpha(c)) {
+            if (wi < MAX_WORD_LEN - 1) {
+                word[wi++] = (char)tolower(c);
+            }
+        } else {
+            if (wi > 0) {
+                word[wi] = '\0';
+                int existing = find_word(wordCount, *wordCountSize, word);
+                if (existing < 0) {
+                    if (*wordCountSize >= MAX_WORDS) {
+                        return 0;
+                    }
+                    strcpy(wordCount[*wordCountSize].word, word);
+                    wordCount[*wordCountSize].count = 0;
+                    existing = (*wordCountSize)++;
+                }
+                wordCount[existing].count++;
+
+                int seen = 0;
+                for (int i = 0; i < uniqueCount; i++) {
+                    if (strcmp(uniqueWords[i], word) == 0) {
+                        sentenceWordIndexes[i] = existing;
+                        seen = 1;
+                        break;
+                    }
+                }
+                if (!seen) {
+                    if (uniqueCount < MAX_WORDS) {
+                        strcpy(uniqueWords[uniqueCount], word);
+                        sentenceWordIndexes[uniqueCount] = existing;
+                        uniqueCount++;
+                    }
+                }
+                wi = 0;
+            }
+        }
+    }
+
+    if (wi > 0) {
+        word[wi] = '\0';
+        int existing = find_word(wordCount, *wordCountSize, word);
+        if (existing < 0) {
+            if (*wordCountSize >= MAX_WORDS) {
+                return 0;
+            }
+            strcpy(wordCount[*wordCountSize].word, word);
+            wordCount[*wordCountSize].count = 0;
+            existing = (*wordCountSize)++;
+        }
+        wordCount[existing].count++;
+
+        int seen = 0;
+        for (int i = 0; i < uniqueCount; i++) {
+            if (strcmp(uniqueWords[i], word) == 0) {
+                sentenceWordIndexes[i] = existing;
+                seen = 1;
+                break;
+            }
+        }
+        if (!seen) {
+            if (uniqueCount < MAX_WORDS) {
+                strcpy(uniqueWords[uniqueCount], word);
+                sentenceWordIndexes[uniqueCount] = existing;
+                uniqueCount++;
+            }
+        }
+    }
+
+    for (int i = 0; i < uniqueCount; i++) {
+        for (int j = i + 1; j < uniqueCount; j++) {
+            int idx1 = sentenceWordIndexes[i];
+            int idx2 = sentenceWordIndexes[j];
+            assoc[idx1 * MAX_WORDS + idx2]++;
+            assoc[idx2 * MAX_WORDS + idx1]++;
+        }
+    }
+    *outCount = uniqueCount;
+    return 1;
+}
+
+int build_word_association(const char* filename, WordItem wordCount[], int* outWordCount, int** outAssoc) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        return 0;
+    }
+    *outWordCount = 0;
+    int* assoc = (int*)calloc(MAX_WORDS * MAX_WORDS, sizeof(int));
+    if (!assoc) {
+        fclose(file);
+        return 0;
+    }
+
+    char sentence[MAX_LINE_LEN * 4];
+    int si = 0;
+    int c;
+    while ((c = fgetc(file)) != EOF) {
+        if (si < (int)sizeof(sentence) - 1) {
+            sentence[si++] = (char)c;
+        }
+        if (c == '.' || c == '?' || c == '!' || c == ';' || c == '\n' || si >= (int)sizeof(sentence) - 1) {
+            sentence[si] = '\0';
+            char uniqueWords[MAX_WORDS][MAX_WORD_LEN];
+            int uniqueCount = 0;
+            if (!extract_unique_words_from_sentence(sentence, uniqueWords, &uniqueCount, wordCount, outWordCount, assoc)) {
+                free(assoc);
+                fclose(file);
+                return 0;
+            }
+            si = 0;
+        }
+    }
+    if (si > 0) {
+        sentence[si] = '\0';
+        char uniqueWords[MAX_WORDS][MAX_WORD_LEN];
+        int uniqueCount = 0;
+        if (!extract_unique_words_from_sentence(sentence, uniqueWords, &uniqueCount, wordCount, outWordCount, assoc)) {
+            free(assoc);
+            fclose(file);
+            return 0;
+        }
+    }
+
+    fclose(file);
+    *outAssoc = assoc;
+    return 1;
+}
+
+typedef struct {
+    int idx;
+    int count;
+} Neighbor;
+
+int compare_neighbors(const void* a, const void* b) {
+    const Neighbor* na = (const Neighbor*)a;
+    const Neighbor* nb = (const Neighbor*)b;
+    if (na->count != nb->count) {
+        return nb->count - na->count;
+    }
+    return na->idx - nb->idx;
+}
+
+void print_association_list(const WordItem wordCount[], int wordCountSize, int assocRow[]) {
+    Neighbor neighbors[MAX_WORDS];
+    int neighborCount = 0;
+    for (int i = 0; i < wordCountSize; i++) {
+        if (assocRow[i] > 0) {
+            neighbors[neighborCount].idx = i;
+            neighbors[neighborCount].count = assocRow[i];
+            neighborCount++;
+        }
+    }
+    if (neighborCount == 0) {
+        printf("  (无关联单词)\n");
+        return;
+    }
+    qsort(neighbors, neighborCount, sizeof(Neighbor), compare_neighbors);
+    for (int i = 0; i < neighborCount; i++) {
+        printf("  %s : %d\n", wordCount[neighbors[i].idx].word, neighbors[i].count);
+    }
+}
+
+void show_association_graph(const char* filename) {
+    WordItem wordCount[MAX_WORDS];
+    int wordCountSize = 0;
+    int* assoc = NULL;
+    if (!build_word_association(filename, wordCount, &wordCountSize, &assoc)) {
+        printf("无法打开文件: %s\n", filename);
+        return;
+    }
+    if (wordCountSize == 0) {
+        printf("(未找到单词)\n");
+        free(assoc);
+        return;
+    }
+    printf("\n--- 单词关联图: %s ---\n", filename);
+    for (int i = 0; i < wordCountSize; i++) {
+        printf("%s\n", wordCount[i].word);
+        print_association_list(wordCount, wordCountSize, assoc + i * MAX_WORDS);
+    }
+    free(assoc);
+}
+
+void show_keyword_association_query(const char* filename, const char* keyword) {
+    WordItem wordCount[MAX_WORDS];
+    int wordCountSize = 0;
+    int* assoc = NULL;
+    if (!build_word_association(filename, wordCount, &wordCountSize, &assoc)) {
+        printf("无法打开文件: %s\n", filename);
+        return;
+    }
+    int idx = find_word(wordCount, wordCountSize, keyword);
+    if (idx < 0) {
+        printf("未在文本中找到关键词: %s\n", keyword);
+        free(assoc);
+        return;
+    }
+    printf("\n--- 关键词关联查询: %s ---\n", keyword);
+    print_association_list(wordCount, wordCountSize, assoc + idx * MAX_WORDS);
+    free(assoc);
+}
 // Huffman 二叉树节点，用于文本压缩/解压
 typedef struct HuffmanNode {
     unsigned char ch;
