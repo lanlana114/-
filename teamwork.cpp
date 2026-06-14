@@ -714,7 +714,7 @@ int decompress_file(const char* input, const char* output) {
     }
 
     HuffmanNode* node = root;
-    int bytesRead;
+
     unsigned char byte;
     uint64_t written = 0;
     while (written < originalSize && fread(&byte, 1, 1, in) == 1) {
@@ -969,6 +969,8 @@ int main(void) {
         printf("6. 关键词查找 (朴素/KMP)\n");
         printf("7. 单词字典序排序输出\n");
         printf("8. 文本压缩/解压\n");
+        printf("9. 单词关联图\n");
+        printf("10. 关键词关联查询\n");
         printf("0. 退出\n");
         printf("请选择: ");
         if (scanf("%d", &choice) != 1) {
@@ -1114,6 +1116,58 @@ int main(void) {
                 continue;
             }
             show_sorted_words(sortFilename);
+            } else if (choice == 9) {
+            char assocFilename[512];
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            printf("请输入文本文件名: ");
+            if (fgets(assocFilename, sizeof(assocFilename), stdin) == NULL) {
+                printf("读取文件名失败。\n");
+                continue;
+            }
+            size_t len = strlen(assocFilename);
+            if (len > 0 && assocFilename[len - 1] == '\n') {
+                assocFilename[len - 1] = '\0';
+            }
+            if (assocFilename[0] == '\0') {
+                printf("文件名不能为空。\n");
+                continue;
+            }
+            show_association_graph(assocFilename);
+        } else if (choice == 10) {
+            char queryFilename[512];
+            char keyword[MAX_LINE_LEN];
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF) {
+            }
+            printf("请输入文本文件名: ");
+            if (fgets(queryFilename, sizeof(queryFilename), stdin) == NULL) {
+                printf("读取文件名失败。\n");
+                continue;
+            }
+            size_t len = strlen(queryFilename);
+            if (len > 0 && queryFilename[len - 1] == '\n') {
+                queryFilename[len - 1] = '\0';
+            }
+            if (queryFilename[0] == '\0') {
+                printf("文件名不能为空。\n");
+                continue;
+            }
+            printf("请输入关键词: ");
+            if (fgets(keyword, sizeof(keyword), stdin) == NULL) {
+                printf("读取关键词失败。\n");
+                continue;
+            }
+            len = strlen(keyword);
+            if (len > 0 && keyword[len - 1] == '\n') {
+                keyword[len - 1] = '\0';
+            }
+            if (keyword[0] == '\0') {
+                printf("关键词不能为空。\n");
+                continue;
+            }
+            show_keyword_association_query(queryFilename, keyword);
         } else if (choice == 8) {
             int action = 0;
             char inputName[512];
