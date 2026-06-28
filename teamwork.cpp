@@ -241,6 +241,480 @@ void show_sorted_words(const char* filename) {
     free_word_tree(root);
 }
 
+#define HASH_TABLE_SIZE 4096
+
+typedef struct WordHashEntry {
+    char word[MAX_WORD_LEN];
+    int count;
+    struct WordHashEntry* next;
+} WordHashEntry;
+
+unsigned int hash_string(const char* str) {
+    unsigned int hash = 5381;
+    int c;
+    while ((c = (unsigned char)*str++) != 0) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
+
+WordHashEntry* create_word_entry(const char* word) {
+    WordHashEntry* entry = (WordHashEntry*)malloc(sizeof(WordHashEntry));
+    if (!entry) {
+        return NULL;
+    }
+    strcpy(entry->word, word);
+    entry->count = 1;
+    entry->next = NULL;
+    return entry;
+}
+
+void free_word_hash_table(WordHashEntry* table[]) {
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        WordHashEntry* entry = table[i];
+        while (entry) {
+            WordHashEntry* next = entry->next;
+            free(entry);
+            entry = next;
+        }
+    }
+}
+
+int build_word_hash(const char* filename, WordItem wordCount[], int* outCount) {
+    WordHashEntry* table[HASH_TABLE_SIZE] = {0};
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        return 0;
+    }
+    char word[MAX_WORD_LEN];
+    int wi = 0;
+    int c;
+    while ((c = fgetc(file)) != EOF) {
+        if (isalpha(c)) {
+            if (wi < MAX_WORD_LEN - 1) {
+                word[wi++] = (char)tolower(c);
+            }
+        } else {
+            if (wi > 0) {
+                word[wi] = '\0';
+                unsigned int hash = hash_string(word) % HASH_TABLE_SIZE;
+                WordHashEntry* entry = table[hash];
+                while (entry) {
+                    if (strcmp(entry->word, word) == 0) {
+                        entry->count++;
+                        break;
+                    }
+                    entry = entry->next;
+                }
+                if (!entry) {
+                    entry = create_word_entry(word);
+                    if (!entry) {
+                        free_word_hash_table(table);
+                        fclose(file);
+                        return 0;
+                    }
+                    entry->next = table[hash];
+                    table[hash] = entry;
+                }
+                wi = 0;
+            }
+        }
+    }
+    if (wi > 0) {
+        word[wi] = '\0';
+        unsigned int hash = hash_string(word) % HASH_TABLE_SIZE;
+        WordHashEntry* entry = table[hash];
+        while (entry) {
+            if (strcmp(entry->word, word) == 0) {
+                entry->count++;
+                break;
+            }
+            entry = entry->next;
+        }
+        if (!entry) {
+            entry = create_word_entry(word);
+            if (!entry) {
+                free_word_hash_table(table);
+                fclose(file);
+                return 0;
+            }
+            entry->next = table[hash];
+            table[hash] = entry;
+        }
+    }
+    fclose(file);
+
+    int idx = 0;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        for (WordHashEntry* entry = table[i]; entry; entry = entry->next) {
+            if (idx < MAX_WORDS) {
+                strcpy(wordCount[idx].word, entry->word);
+                wordCount[idx].count = entry->count;
+                idx++;
+            }
+        }
+    }
+    *outCount = idx;
+    free_word_hash_table(table);
+    return 1;
+}
+
+int compare_word_freq_asc(const void* a, const void* b) {
+    const WordItem* wa = (const WordItem*)a;
+    const WordItem* wb = (const WordItem*)b;
+    if (wa->count != wb->count) {
+        return wa->count - wb->count;
+    }
+    return strcmp(wa->word, wb->word);
+}
+
+int compare_word_freq_desc(const void* a, const void* b) {
+    const WordItem* wa = (const WordItem*)a;
+    const WordItem* wb = (const WordItem*)b;
+    if (wa->count != wb->count) {
+        return wb->count - wa->count;
+    }
+    return strcmp(wa->word, wb->word);
+}
+
+int compare_word_lex_asc(const void* a, const void* b) {
+    const WordItem* wa = (const WordItem*)a;
+    const WordItem* wb = (const WordItem*)b;
+    return strcmp(wa->word, wb->word);
+}
+
+int compare_word_lex_desc(const void* a, const void* b) {
+    const WordItem* wa = (const WordItem*)a;
+    const WordItem* wb = (const WordItem*)b;
+    return strcmp(wb->word, wa->word);
+}
+
+typedef struct {
+    char text[MAX_LINE_LEN * 4];
+    int length;
+    int wordCount;
+} SentenceItem;
+
+int count_sentence_words(const char* sentence) {
+    int count = 0;
+    int inWord = 0;
+    for (const char* p = sentence; *p; p++) {
+        if (isalpha((unsigned char)*p)) {
+            if (!inWord) {
+                count++;
+                inWord = 1;
+            }
+        } else {
+            inWord = 0;
+        }
+    }
+    return count;
+}
+
+int extract_sentences(const char* text, SentenceItem sentences[], int* outCount) {
+    int count = 0;
+    const char* begin = text;
+    const char* p = text;
+    while (*p != '\0') {
+        if (*p == '.' || *p == '?' || *p == '!' || *p == ';' || *p == '\n') {
+            int len = (int)(p - begin + 1);
+            while (len > 0 && isspace((unsigned char)*begin) && begin < p) {
+                begin++;
+                len--;
+            }
+            if (len > 0) {
+                if (count < MAX_LINES) {
+                    if (len >= (int)sizeof(sentences[count].text)) {
+                        len = (int)sizeof(sentences[count].text) - 1;
+                    }
+                    memcpy(sentences[count].text, begin, len);
+                    sentences[count].text[len] = '\0';
+                    sentences[count].length = len;
+                    sentences[count].wordCount = count_sentence_words(sentences[count].text);
+                    count++;
+                }
+            }
+            begin = p + 1;
+        }
+        p++;
+    }
+    if (*begin != '\0') {
+        int len = (int)strlen(begin);
+        while (len > 0 && isspace((unsigned char)*begin)) {
+            begin++;
+            len--;
+        }
+        if (len > 0 && count < MAX_LINES) {
+            if (len >= (int)sizeof(sentences[count].text)) {
+                len = (int)sizeof(sentences[count].text) - 1;
+            }
+            memcpy(sentences[count].text, begin, len);
+            sentences[count].text[len] = '\0';
+            sentences[count].length = len;
+            sentences[count].wordCount = count_sentence_words(sentences[count].text);
+            count++;
+        }
+    }
+    *outCount = count;
+    return 1;
+}
+
+int compare_sentence_len_asc(const void* a, const void* b) {
+    const SentenceItem* sa = (const SentenceItem*)a;
+    const SentenceItem* sb = (const SentenceItem*)b;
+    return sa->length - sb->length;
+}
+
+int compare_sentence_len_desc(const void* a, const void* b) {
+    const SentenceItem* sa = (const SentenceItem*)a;
+    const SentenceItem* sb = (const SentenceItem*)b;
+    return sb->length - sa->length;
+}
+
+int compare_sentence_wordcount_asc(const void* a, const void* b) {
+    const SentenceItem* sa = (const SentenceItem*)a;
+    const SentenceItem* sb = (const SentenceItem*)b;
+    return sa->wordCount - sb->wordCount;
+}
+
+int compare_sentence_wordcount_desc(const void* a, const void* b) {
+    const SentenceItem* sa = (const SentenceItem*)a;
+    const SentenceItem* sb = (const SentenceItem*)b;
+    return sb->wordCount - sa->wordCount;
+}
+
+int write_sorted_words_to_file(const char* filename, const WordItem wordCount[], int size) {
+    FILE* out = fopen(filename, "w");
+    if (!out) {
+        return 0;
+    }
+    for (int i = 0; i < size; i++) {
+        fprintf(out, "%s : %d\n", wordCount[i].word, wordCount[i].count);
+    }
+    fclose(out);
+    return 1;
+}
+
+int write_sorted_sentences_to_file(const char* filename, const SentenceItem sentences[], int size) {
+    FILE* out = fopen(filename, "w");
+    if (!out) {
+        return 0;
+    }
+    for (int i = 0; i < size; i++) {
+        fprintf(out, "%s\n", sentences[i].text);
+    }
+    fclose(out);
+    return 1;
+}
+
+int read_file_text(const char* filename, char** outText) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        return 0;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return 0;
+    }
+    long length = ftell(file);
+    if (length < 0) {
+        fclose(file);
+        return 0;
+    }
+    rewind(file);
+    char* text = (char*)malloc((size_t)length + 1);
+    if (!text) {
+        fclose(file);
+        return 0;
+    }
+    size_t readCount = fread(text, 1, (size_t)length, file);
+    text[readCount] = '\0';
+    fclose(file);
+    *outText = text;
+    return 1;
+}
+
+void sort_and_export_words(const char* filename) {
+    WordItem wordCount[MAX_WORDS];
+    int wordCountSize = 0;
+    if (!build_word_hash(filename, wordCount, &wordCountSize)) {
+        printf("无法打开文件: %s\n", filename);
+        return;
+    }
+    if (wordCountSize == 0) {
+        printf("未找到任何单词。\n");
+        return;
+    }
+
+    int sortOption;
+    printf("请选择单词排序规则:\n");
+    printf("1 = 词频从低到高\n");
+    printf("2 = 词频从高到低\n");
+    printf("3 = 字典序正序\n");
+    printf("4 = 字典序逆序\n");
+    printf("请选择: ");
+    if (scanf("%d", &sortOption) != 1 || sortOption < 1 || sortOption > 4) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        printf("无效选择，返回菜单。\n");
+        return;
+    }
+
+    if (sortOption == 1) {
+        qsort(wordCount, wordCountSize, sizeof(WordItem), compare_word_freq_asc);
+    } else if (sortOption == 2) {
+        qsort(wordCount, wordCountSize, sizeof(WordItem), compare_word_freq_desc);
+    } else if (sortOption == 3) {
+        qsort(wordCount, wordCountSize, sizeof(WordItem), compare_word_lex_asc);
+    } else {
+        qsort(wordCount, wordCountSize, sizeof(WordItem), compare_word_lex_desc);
+    }
+
+    printf("\n--- 排序后单词列表 (%s) ---\n", filename);
+    for (int i = 0; i < wordCountSize; i++) {
+        printf("%s : %d\n", wordCount[i].word, wordCount[i].count);
+    }
+
+    int exportOption;
+    printf("是否导出排序结果到文本文件？1=是, 2=否: ");
+    if (scanf("%d", &exportOption) != 1) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        exportOption = 2;
+    }
+    if (exportOption == 1) {
+        char outputName[512];
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        printf("请输入输出文件名: ");
+        if (fgets(outputName, sizeof(outputName), stdin) == NULL) {
+            printf("读取文件名失败。\n");
+            return;
+        }
+        size_t len = strlen(outputName);
+        if (len > 0 && outputName[len - 1] == '\n') {
+            outputName[len - 1] = '\0';
+        }
+        if (outputName[0] == '\0') {
+            printf("输出文件名不能为空。\n");
+            return;
+        }
+        if (write_sorted_words_to_file(outputName, wordCount, wordCountSize)) {
+            printf("已导出到: %s\n", outputName);
+        } else {
+            printf("导出失败，请检查文件路径。\n");
+        }
+    }
+}
+
+void sort_and_export_sentences(const char* filename) {
+    char* text = NULL;
+    if (!read_file_text(filename, &text)) {
+        printf("无法打开文件: %s\n", filename);
+        return;
+    }
+
+    SentenceItem sentences[MAX_LINES];
+    int sentenceCount = 0;
+    extract_sentences(text, sentences, &sentenceCount);
+    free(text);
+    if (sentenceCount == 0) {
+        printf("未找到任何句子。\n");
+        return;
+    }
+
+    int sortOption;
+    printf("请选择句子排序规则:\n");
+    printf("1 = 长度短到长\n");
+    printf("2 = 长度长到短\n");
+    printf("3 = 单词数量少到多\n");
+    printf("4 = 单词数量多到少\n");
+    printf("请选择: ");
+    if (scanf("%d", &sortOption) != 1 || sortOption < 1 || sortOption > 4) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        printf("无效选择，返回菜单。\n");
+        return;
+    }
+
+    if (sortOption == 1) {
+        qsort(sentences, sentenceCount, sizeof(SentenceItem), compare_sentence_len_asc);
+    } else if (sortOption == 2) {
+        qsort(sentences, sentenceCount, sizeof(SentenceItem), compare_sentence_len_desc);
+    } else if (sortOption == 3) {
+        qsort(sentences, sentenceCount, sizeof(SentenceItem), compare_sentence_wordcount_asc);
+    } else {
+        qsort(sentences, sentenceCount, sizeof(SentenceItem), compare_sentence_wordcount_desc);
+    }
+
+    printf("\n--- 排序后句子列表 (%s) ---\n", filename);
+    for (int i = 0; i < sentenceCount; i++) {
+        printf("[%d] 长度=%d, 单词=%d: %s\n", i + 1, sentences[i].length, sentences[i].wordCount, sentences[i].text);
+    }
+
+    int exportOption;
+    printf("是否导出排序结果到文本文件？1=是, 2=否: ");
+    if (scanf("%d", &exportOption) != 1) {
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        exportOption = 2;
+    }
+    if (exportOption == 1) {
+        char outputName[512];
+        int ch;
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        printf("请输入输出文件名: ");
+        if (fgets(outputName, sizeof(outputName), stdin) == NULL) {
+            printf("读取文件名失败。\n");
+            return;
+        }
+        size_t len = strlen(outputName);
+        if (len > 0 && outputName[len - 1] == '\n') {
+            outputName[len - 1] = '\0';
+        }
+        if (outputName[0] == '\0') {
+            printf("输出文件名不能为空。\n");
+            return;
+        }
+        if (write_sorted_sentences_to_file(outputName, sentences, sentenceCount)) {
+            printf("已导出到: %s\n", outputName);
+        } else {
+            printf("导出失败，请检查文件路径。\n");
+        }
+    }
+}
+
+void sort_and_export_menu(void) {
+    char filename[512];
+    int choice;
+    int ch;
+    while ((ch = getchar()) != '\n' && ch != EOF) {}
+    printf("请输入文本文件名: ");
+    if (fgets(filename, sizeof(filename), stdin) == NULL) {
+        printf("读取文件名失败。\n");
+        return;
+    }
+    size_t len = strlen(filename);
+    if (len > 0 && filename[len - 1] == '\n') {
+        filename[len - 1] = '\0';
+    }
+    if (filename[0] == '\0') {
+        printf("文件名不能为空。\n");
+        return;
+    }
+    printf("请选择排序对象: 1=单词, 2=句子: ");
+    if (scanf("%d", &choice) != 1 || (choice != 1 && choice != 2)) {
+        while ((ch = getchar()) != '\n' && ch != EOF) {}
+        printf("无效选择，返回菜单。\n");
+        return;
+    }
+    if (choice == 1) {
+        sort_and_export_words(filename);
+    } else {
+        sort_and_export_sentences(filename);
+    }
+}
+
 int extract_unique_words_from_sentence(const char* sentence, char uniqueWords[][MAX_WORD_LEN], int* outCount, WordItem* wordCount, int* wordCountSize, int* assoc) {
     char word[MAX_WORD_LEN];
     int wi = 0;
