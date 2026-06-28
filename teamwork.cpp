@@ -1572,24 +1572,7 @@ int main(void) {
                 }
             }
         } else if (choice == 7) {
-            char sortFilename[512];
-            int ch;
-            while ((ch = getchar()) != '\n' && ch != EOF) {
-            }
-            printf("请输入文本文件名: ");
-            if (fgets(sortFilename, sizeof(sortFilename), stdin) == NULL) {
-                printf("读取文件名失败。\n");
-                continue;
-            }
-            size_t len = strlen(sortFilename);
-            if (len > 0 && sortFilename[len - 1] == '\n') {
-                sortFilename[len - 1] = '\0';
-            }
-            if (sortFilename[0] == '\0') {
-                printf("文件名不能为空。\n");
-                continue;
-            }
-            show_sorted_words(sortFilename);
+          sort_and_export_menu();
             } else if (choice == 9) {
             char assocFilename[512];
             int ch;
